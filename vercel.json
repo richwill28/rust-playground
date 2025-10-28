@@ -1,0 +1,23 @@
+{
+  "name": "rust-playground-frontend",
+  "version": 2,
+  "builds": [
+    {
+      "src": "ui/frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}

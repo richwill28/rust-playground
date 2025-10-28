@@ -1,0 +1,19 @@
+# Rust build outputs
+target/
+Cargo.lock
+
+# Node.js
+node_modules/
+.pnpm-lock.yaml
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
