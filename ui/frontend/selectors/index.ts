@@ -14,6 +14,8 @@ import {
   Version,
 } from '../types';
 
+const MS_PER_S = 1000;
+
 export const codeSelector = (state: State) => state.code;
 export const positionSelector = (state: State) => state.position;
 export const selectionSelector = (state: State) => state.selection;
@@ -228,7 +230,15 @@ const killGracePeriodSSelector = (state: State) =>
 
 export const killGracePeriodMsSelector = createSelector(
   killGracePeriodSSelector,
-  (t) => t * 1000,
+  (t) => t * MS_PER_S,
+);
+
+const oldConfigurationThresholdSSelector = (state: State) =>
+  state.globalConfiguration.oldConfigurationThresholdS;
+
+const oldConfigurationThresholdMsSelector = createSelector(
+  oldConfigurationThresholdSSelector,
+  (t) => t * MS_PER_S,
 );
 
 const formatSeconds = (seconds: number) => {
@@ -261,6 +271,39 @@ export const excessiveExecutionSelector = createSelector(
     e.requestsInProgress > 0 &&
     !e.allowLongRun &&
     (e.totalTimeSecs ?? 0.0) >= limit,
+);
+
+export const resetConfigurationSelector = (state: State) => state.client.showConfigReset;
+
+const parseMaybeISO = (s?: string): Date | undefined => {
+  if (!s) {
+    return undefined;
+  }
+  try {
+    return new Date(s);
+  } catch {
+    return undefined;
+  }
+};
+
+const lastVisitStrSelector = (state: State) => state.client.lastVisitedAt;
+const currVisitStrSelector = (state: State) => state.client.visitedAt;
+
+const lastVisitSelector = createSelector(lastVisitStrSelector, parseMaybeISO);
+const currVisitSelector = createSelector(currVisitStrSelector, parseMaybeISO);
+
+export const resetOldConfigurationSelector = createSelector(
+  lastVisitSelector,
+  currVisitSelector,
+  oldConfigurationThresholdMsSelector,
+  (last, current, thresholdMs) => {
+    if (last && current) {
+      const deltaTimeMs = current.getTime() - last.getTime();
+      return deltaTimeMs > thresholdMs;
+    } else {
+      return false;
+    }
+  }
 );
 
 const gistSelector = (state: State) =>
@@ -367,16 +410,18 @@ const notificationsSelector = (state: State) => state.notifications;
 
 const NOW = new Date();
 
-const RUST_2024_IS_DEFAULT_END = new Date('2025-04-03T00:00:00Z');
-const RUST_2024_IS_DEFAULT_OPEN = NOW <= RUST_2024_IS_DEFAULT_END;
-export const showRust2024IsDefaultSelector = createSelector(
+const RUST_SURVEY_2025_END = new Date('2025-12-17T00:00:00Z');
+const RUST_SURVEY_2025_OPEN = NOW <= RUST_SURVEY_2025_END;
+export const showRustSurvey2025Selector = createSelector(
   notificationsSelector,
-  notifications => RUST_2024_IS_DEFAULT_OPEN && !notifications.seenRust2024IsDefault,
+  notifications => RUST_SURVEY_2025_OPEN && !notifications.seenRustSurvey2025,
 );
 
 export const anyNotificationsToShowSelector = createSelector(
-  showRust2024IsDefaultSelector,
+  showRustSurvey2025Selector,
   excessiveExecutionSelector,
+  resetConfigurationSelector,
+  resetOldConfigurationSelector,
   (...allNotifications) => allNotifications.some(n => n),
 );
 

@@ -11,23 +11,22 @@ fork-bomb-prevention = []
 [dependencies]
 asm-cleanup = { path = "../compiler/base/asm-cleanup" }
 axum = { version = "0.8", features = ["ws"] }
-axum-extra = { version = "0.10", features = ["typed-header"] }
+axum-extra = { version = "0.12", features = ["typed-header"] }
 dotenv = "0.15.0"
 futures = "0.3.21"
-octocrab = "0.47"
-openssl-probe = "0.1.2"
+octocrab = "0.49"
 orchestrator = { path = "../compiler/base/orchestrator" }
 prometheus = { version = "0.14.0", default-features = false }
 regex = "1.0.0"
-rusqlite = { version = "0.37.0", default-features = false, features = ["bundled"] }
+rusqlite = { version = "0.39.0", default-features = false, features = ["bundled"] }
 serde = { version = "1.0", features = ["rc"] }
 serde_derive = "1.0"
 serde_json = "1.0"
-snafu = "0.8.0"
-strum = { version = "0.27.1", features = ["derive"] }
+snafu = "0.9.0"
+strum = { version = "0.28.0", features = ["derive"] }
 tempfile = "3"
 tokio = { version = "1.9", features = ["macros", "time", "process", "rt-multi-thread"] }
-tokio-util = "0.7.9"
+tokio-util = { version = "0.7.9", default-features = false, features = ["time"] }
 tower-http = { version = "0.6", features = ["cors", "fs", "request-id", "set-header", "trace"] }
 tracing = { version = "0.1.37", features = ["attributes"] }
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }

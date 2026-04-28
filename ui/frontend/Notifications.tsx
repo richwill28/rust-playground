@@ -3,36 +3,40 @@ import { Portal } from 'react-portal';
 
 import { Close } from './Icon';
 import { useAppDispatch, useAppSelector } from './hooks';
-import { seenRust2024IsDefault } from './reducers/notifications';
+import * as client from './reducers/client';
+import { seenRustSurvey2025 } from './reducers/notifications';
 import { allowLongRun, wsExecuteKillCurrent } from './reducers/output/execute';
 import * as selectors from './selectors';
 
 import * as styles from './Notifications.module.css';
 
-const EDITION_URL = 'https://doc.rust-lang.org/edition-guide/';
+const SURVEY_URL = 'https://blog.rust-lang.org/2025/11/17/launching-the-2025-state-of-rust-survey/';
 
 const Notifications: React.FC = () => {
   return (
     <Portal>
       <div className={styles.container}>
-        <Rust2024IsDefaultNotification />
+        <RustSurvey2025Notification />
         <ExcessiveExecutionNotification />
+        <ResetConfigurationNotification />
+        <ResetOldConfigurationNotification />
       </div>
     </Portal>
   );
 };
 
-const Rust2024IsDefaultNotification: React.FC = () => {
-  const showIt = useAppSelector(selectors.showRust2024IsDefaultSelector);
+const RustSurvey2025Notification: React.FC = () => {
+  const showIt = useAppSelector(selectors.showRustSurvey2025Selector);
 
   const dispatch = useAppDispatch();
-  const seenIt = useCallback(() => dispatch(seenRust2024IsDefault()), [dispatch]);
+  const seenIt = useCallback(() => dispatch(seenRustSurvey2025()), [dispatch]);
 
   return showIt ? (
     <Notification onClose={seenIt}>
-      As of Rust 1.85, the default edition of Rust is now Rust 2024. Learn more about editions in
-      the <a href={EDITION_URL}>Edition Guide</a>. To specify which edition to use, use the advanced
-      compilation options menu.
+      Please help us take a look at who the Rust community is composed of, how the Rust project is
+      doing, and how we can improve the Rust programming experience by completing the{' '}
+      <a href={SURVEY_URL}>2025 State of Rust Survey</a>. Whether or not you use Rust today, we want
+      to know your opinions.
     </Notification>
   ) : null;
 };
@@ -57,6 +61,54 @@ const ExcessiveExecutionNotification: React.FC = () => {
         <button onClick={allow}>Allow the process to continue</button>
       </div>
     </Notification>
+  ) : null;
+};
+
+interface ResetNotificationCommonProps {
+  preamble?: string;
+  onReset: () => void;
+  onCancel: () => void;
+}
+
+const ResetNotificationCommon: React.FC<ResetNotificationCommonProps> = ({
+  preamble,
+  onReset,
+  onCancel,
+}) => (
+  <Notification onClose={onCancel}>
+    {preamble}
+    Would you like to reset all code and configuration back to the default values to get a fresh
+    start?
+    <div className={styles.action}>
+      <button onClick={onReset}>Reset all code and configuration</button>
+      <button onClick={onCancel}>Keep the current code and configuration</button>
+    </div>
+  </Notification>
+);
+
+const ResetConfigurationNotification: React.FC = () => {
+  const showResetConfiguration = useAppSelector(selectors.resetConfigurationSelector);
+
+  const dispatch = useAppDispatch();
+  const reset = useCallback(() => dispatch(client.resetEverything()), [dispatch]);
+  const keep = useCallback(() => dispatch(client.hideConfigReset()), [dispatch]);
+
+  return showResetConfiguration ? (
+    <ResetNotificationCommon onReset={reset} onCancel={keep} />
+  ) : null;
+};
+
+const ResetOldConfigurationNotification: React.FC = () => {
+  const showResetOldConfiguration = useAppSelector(selectors.resetOldConfigurationSelector);
+
+  const dispatch = useAppDispatch();
+  const reset = useCallback(() => dispatch(client.resetEverything()), [dispatch]);
+  const keep = useCallback(() => dispatch(client.updateLastVisitedAt()), [dispatch]);
+
+  const preamble = "It's been a while since you've used the Playground. ";
+
+  return showResetOldConfiguration ? (
+    <ResetNotificationCommon preamble={preamble} onReset={reset} onCancel={keep} />
   ) : null;
 };
 

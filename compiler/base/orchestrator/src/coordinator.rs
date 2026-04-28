@@ -4,19 +4,20 @@ use snafu::prelude::*;
 use std::{
     collections::{BTreeSet, HashMap},
     fmt, mem, ops,
-    pin::pin,
+    pin::{self, pin},
     process::Stdio,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, LazyLock, Mutex,
     },
+    task,
     time::Duration,
 };
 use tokio::{
     process::{Child, ChildStdin, ChildStdout, Command},
     select,
     sync::{mpsc, oneshot, OnceCell},
-    task::JoinSet,
+    task::{JoinHandle, JoinSet},
     time::{self, MissedTickBehavior},
     try_join,
 };
@@ -931,15 +932,13 @@ where
     B: Backend,
 {
     fn new(limits: Arc<dyn ResourceLimits>, backend: B) -> Self {
-        let token = CancelOnDrop(CancellationToken::new());
-
         Self {
             limits,
             backend,
             stable: OnceCell::new(),
             beta: OnceCell::new(),
             nightly: OnceCell::new(),
-            token,
+            token: CancelOnDrop::default(),
         }
     }
 
@@ -1835,6 +1834,9 @@ impl Container {
             .await
             .context(CouldNotStartCargoSnafu)?;
 
+        let token = token.child_token();
+        let drop_token = token.clone();
+
         let task = tokio::spawn({
             async move {
                 let mut cancelled = pin!(token.cancelled().fuse());
@@ -1916,7 +1918,7 @@ impl Container {
             }
             .instrument(trace_span!("cargo task").or_current())
         })
-        .abort_on_drop();
+        .cancel_on_drop(drop_token);
 
         Ok(SpawnCargo {
             permit,
@@ -2177,9 +2179,50 @@ pub enum DoRequestError {
     CouldNotStartCargo { source: SpawnCargoError },
 }
 
+/// Triggers `CancellationToken::cancel` when dropped, wrapping
+/// another future (which should make use of the token) to keep this
+/// guard paired with it.
+#[derive(Debug, Default)]
+struct CancelOnDropFuture<F> {
+    token: CancellationToken,
+    fut: F,
+}
+
+impl<F> Drop for CancelOnDropFuture<F> {
+    fn drop(&mut self) {
+        self.token.cancel();
+    }
+}
+
+impl<F> Future for CancelOnDropFuture<F>
+where
+    F: Future + Unpin,
+{
+    type Output = F::Output;
+
+    fn poll(mut self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+        pin::Pin::new(&mut self.fut).poll(cx)
+    }
+}
+
+trait CancelOnDropFutureExt {
+    fn cancel_on_drop(self, token: CancellationToken) -> CancelOnDropFuture<Self>
+    where
+        Self: Sized;
+}
+
+impl<T> CancelOnDropFutureExt for T {
+    fn cancel_on_drop(self, token: CancellationToken) -> CancelOnDropFuture<Self>
+    where
+        Self: Sized,
+    {
+        CancelOnDropFuture { token, fut: self }
+    }
+}
+
 struct SpawnCargo {
     permit: Box<dyn ProcessPermit>,
-    task: AbortOnDropHandle<Result<ExecuteCommandResponse, SpawnCargoError>>,
+    task: CancelOnDropFuture<JoinHandle<Result<ExecuteCommandResponse, SpawnCargoError>>>,
     stdin_tx: mpsc::Sender<String>,
     stdout_rx: mpsc::Receiver<String>,
     stderr_rx: mpsc::Receiver<String>,
@@ -2581,12 +2624,14 @@ impl TerminateContainer {
         use terminate_container_error::*;
 
         if let Some((name, mut kill_child)) = self.0.take() {
-            Self::stop_tracking(&name);
+            Self::stop_tracking(&name, false);
             let o = kill_child
                 .output()
                 .await
                 .context(TerminateContainerSnafu { name: &name })?;
             Self::report_failure(name, o);
+        } else {
+            warn!("Would have stopped tracking in `terminate_now`, but found `None`");
         }
 
         Ok(())
@@ -2607,14 +2652,14 @@ impl TerminateContainer {
     }
 
     #[instrument]
-    fn stop_tracking(name: &str) {
+    fn stop_tracking(name: &str, from_drop: bool) {
         let was_tracked = TRACKED_CONTAINERS
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(name);
 
         if was_tracked {
-            info!("Stopped tracking container");
+            info!(from_drop, "Stopped tracking container");
         } else {
             error!("Stopped tracking container, but it was not in the tracking set");
         }
@@ -2643,7 +2688,7 @@ impl TerminateContainer {
 impl Drop for TerminateContainer {
     fn drop(&mut self) {
         if let Some((name, mut kill_child)) = self.0.take() {
-            Self::stop_tracking(&name);
+            Self::stop_tracking(&name, true);
             match kill_child.as_std_mut().output() {
                 Ok(o) => Self::report_failure(name, o),
                 Err(e) => error!("Unable to kill container {name} while dropping: {e}"),

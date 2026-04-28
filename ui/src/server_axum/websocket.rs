@@ -27,7 +27,10 @@ use tokio::{
     task::{AbortHandle, JoinSet},
     time,
 };
-use tokio_util::sync::{CancellationToken, DropGuard};
+use tokio_util::{
+    sync::{CancellationToken, DropGuard},
+    time::FutureExt as _,
+};
 use tracing::{error, info, instrument, warn, Instrument};
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -204,21 +207,49 @@ pub(crate) async fn handle(
     feature_flags: FeatureFlags,
     db: Handle,
 ) {
-    static WEBSOCKET_ID: AtomicU64 = AtomicU64::new(0);
+    struct MetricGuard {
+        clean: bool,
+        start: Instant,
+    }
 
-    metrics::LIVE_WS.inc();
-    let start = Instant::now();
+    impl MetricGuard {
+        fn new() -> Self {
+            static WEBSOCKET_ID: AtomicU64 = AtomicU64::new(0);
 
-    let id = WEBSOCKET_ID.fetch_add(1, Ordering::SeqCst);
-    tracing::Span::current().record("ws_id", id);
-    info!("WebSocket started");
+            metrics::LIVE_WS.inc();
+            let start = Instant::now();
 
-    handle_core(socket, config, factory, feature_flags, db).await;
+            let id = WEBSOCKET_ID.fetch_add(1, Ordering::SeqCst);
+            tracing::Span::current().record("ws_id", id);
+            info!("WebSocket started");
 
-    info!("WebSocket ending");
-    metrics::LIVE_WS.dec();
-    let elapsed = start.elapsed();
-    metrics::DURATION_WS.observe(elapsed.as_secs_f64());
+            Self {
+                clean: false,
+                start,
+            }
+        }
+    }
+
+    impl Drop for MetricGuard {
+        fn drop(&mut self) {
+            info!(clean = self.clean, "WebSocket ending");
+            metrics::LIVE_WS.dec();
+            let elapsed = self.start.elapsed();
+            metrics::DURATION_WS.observe(elapsed.as_secs_f64());
+        }
+    }
+
+    let mut mg = MetricGuard::new();
+
+    let hc = handle_core(socket, config, factory, feature_flags, db)
+        .timeout(config.overall_timeout())
+        .await;
+
+    if hc.is_err() {
+        error!("`handle_core` exceeded the overall timeout");
+    }
+
+    mg.clean = true;
 }
 
 type TaggedError = (Error, Option<Meta>);
@@ -346,7 +377,12 @@ async fn handle_core(
     feature_flags: FeatureFlags,
     db: Handle,
 ) {
-    if !connect_handshake(&mut socket).await {
+    let accepted_handshake = connect_handshake(&mut socket)
+        .timeout(config.handshake_timeout)
+        .await
+        .unwrap_or(false);
+
+    if !accepted_handshake {
         return;
     }
 
@@ -478,12 +514,21 @@ async fn handle_core(
                     info!("Container requested to idle");
                 }
 
-                let idled = manager.idle().await.context(StreamingCoordinatorIdleSnafu);
-                let Err(error) = idled else { continue };
+                match manager.idle().timeout(config.idle_shutdown_timeout).await {
+                    Ok(idled) => {
+                        let idled = idled.context(StreamingCoordinatorIdleSnafu);
+                        let Err(error) = idled else { continue };
 
-                if tx.send(Err((error, None))).await.is_err() {
-                    // We can't send a response
-                    break;
+                        if tx.send(Err((error, None))).await.is_err() {
+                            // We can't send a response
+                            break;
+                        }
+                    }
+
+                    Err(_) => {
+                        error!("Timed out idling the Coordinator");
+                        break;
+                    }
                 }
             }
 
@@ -492,8 +537,12 @@ async fn handle_core(
     }
 
     drop((tx, rx, socket));
-    if let Err(e) = manager.shutdown().await {
-        error!("Could not shut down the Coordinator: {e:?}");
+    let shutdown = manager.shutdown().timeout(config.shutdown_timeout).await;
+
+    match shutdown {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => error!("Could not shut down the Coordinator: {e:?}"),
+        Err(_) => error!("Timed out shutting down the Coordinator"),
     }
 }
 
@@ -692,7 +741,7 @@ async fn handle_execute_inner(
         mut stderr_rx,
         mut status_rx,
     } = coordinator
-        .begin_execute(token.clone(), req.clone())
+        .begin_execute(token, req.clone())
         .await
         .context(BeginSnafu)?;
 
