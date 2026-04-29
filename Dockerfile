@@ -22,7 +22,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install Node.js and pnpm for frontend
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
 RUN apt-get install -y nodejs
 RUN npm install -g pnpm
 
