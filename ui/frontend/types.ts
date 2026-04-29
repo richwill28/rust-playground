@@ -95,6 +95,8 @@ export enum PrimaryActionAuto {
 
 export enum PrimaryActionCore {
   Asm = 'asm',
+  Aeneas = 'aeneas',
+  Polonius = 'polonius',
   Compile = 'compile',
   Execute = 'execute',
   LlvmIr = 'llvm-ir',

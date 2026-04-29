@@ -1012,6 +1012,8 @@ pub(crate) mod api_orchestrator_integration_impls {
                 crate_type: CrateType::Binary,
                 tests,
                 backtrace: false,
+                aeneas: false,
+                polonius: false,
                 code,
             })
         }
@@ -1073,6 +1075,8 @@ pub(crate) mod api_orchestrator_integration_impls {
                 crate_type,
                 tests,
                 backtrace,
+                aeneas,
+                polonius,
                 code,
             } = other;
 
@@ -1089,6 +1093,8 @@ pub(crate) mod api_orchestrator_integration_impls {
                 edition: parse_edition(&edition)?,
                 tests,
                 backtrace,
+                aeneas,
+                polonius,
                 code,
             })
         }
@@ -1146,6 +1152,8 @@ pub(crate) mod api_orchestrator_integration_impls {
                 crate_type,
                 tests,
                 backtrace,
+                aeneas,
+                polonius,
                 code,
             } = other;
 
@@ -1156,6 +1164,8 @@ pub(crate) mod api_orchestrator_integration_impls {
                 edition: parse_edition(&edition)?,
                 tests,
                 backtrace,
+                aeneas,
+                polonius,
                 code,
             })
         }

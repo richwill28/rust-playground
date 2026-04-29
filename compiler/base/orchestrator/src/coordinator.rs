@@ -70,6 +70,14 @@ pub struct Version {
 }
 
 impl Version {
+    fn unavailable(tool_name: &str) -> Self {
+        Self {
+            release: format!("{tool_name}-unavailable"),
+            commit_hash: String::new(),
+            commit_date: String::new(),
+        }
+    }
+
     fn parse_rustc_version_verbose(rustc_version: &str) -> Self {
         let mut release = "";
         let mut commit_hash = "";
@@ -375,7 +383,38 @@ pub struct ExecuteRequest {
     pub crate_type: CrateType,
     pub tests: bool,
     pub backtrace: bool,
+    pub aeneas: bool,
+    pub polonius: bool,
     pub code: String,
+}
+
+const AENEAS_RUSTFLAG: &str = "-Zaeneas";
+const POLONIUS_RUSTFLAG: &str = "-Zpolonius=next";
+const AENEAS_STAGE2_LIB_PATH: &str = "/playground/rust/build/x86_64-unknown-linux-gnu/stage2/lib";
+const AENEAS_CHARON_BIN_PATH: &str = "/playground/.cargo/bin/charon";
+const AENEAS_BIN_PATH: &str = "/playground/aeneas-bin/aeneas";
+const PLAYGROUND_BINARY_NAME: &str = "playground";
+
+fn extend_rustflags(envs: &mut HashMap<String, String>, aeneas: bool, polonius: bool) {
+    let mut flags = Vec::new();
+    if aeneas {
+        flags.push(AENEAS_RUSTFLAG);
+    }
+    if polonius {
+        flags.push(POLONIUS_RUSTFLAG);
+    }
+
+    if !flags.is_empty() {
+        envs.extend(kvs!("RUSTFLAGS" => flags.join(" ")));
+    }
+}
+
+fn extend_aeneas_envs(envs: &mut HashMap<String, String>) {
+    envs.extend(kvs!(
+        "LD_LIBRARY_PATH" => AENEAS_STAGE2_LIB_PATH,
+        "CHARON_BIN" => AENEAS_CHARON_BIN_PATH,
+        "AENEAS_BIN" => AENEAS_BIN_PATH,
+    ));
 }
 
 impl LowerRequest for ExecuteRequest {
@@ -388,22 +427,75 @@ impl LowerRequest for ExecuteRequest {
     }
 
     fn execute_cargo_request(&self) -> ExecuteCommandRequest {
-        let mut args = vec![];
+        let mut envs = HashMap::new();
+        if self.backtrace {
+            envs.extend(kvs!("RUST_BACKTRACE" => "1"));
+        }
+
+        // Scope borrow-checking flags to the playground crate instead of all
+        // dependencies, then run the produced binary directly.
+        if self.aeneas || self.polonius {
+            let mut rustc_flags = Vec::new();
+            if self.aeneas {
+                rustc_flags.push(AENEAS_RUSTFLAG);
+            }
+            if self.polonius {
+                rustc_flags.push(POLONIUS_RUSTFLAG);
+            }
+
+            let mut check_args = vec!["cargo rustc".to_owned()];
+            if self.tests {
+                check_args.push("--tests".to_owned());
+            } else if self.crate_type.is_binary() {
+                check_args.push(format!("--bin {PLAYGROUND_BINARY_NAME}"));
+            } else {
+                check_args.push("--lib".to_owned());
+            }
+            if let Mode::Release = self.mode {
+                check_args.push("--release".to_owned());
+            }
+            check_args.push(format!("-- {}", rustc_flags.join(" ")));
+            let check_command = check_args.join(" ");
+
+            let run_command = if !self.tests && self.crate_type.is_binary() {
+                let profile = match self.mode {
+                    Mode::Debug => "debug",
+                    Mode::Release => "release",
+                };
+                format!(" && ./target/{profile}/{PLAYGROUND_BINARY_NAME}")
+            } else {
+                String::new()
+            };
+
+            if self.aeneas {
+                extend_aeneas_envs(&mut envs);
+            }
+
+            return ExecuteCommandRequest {
+                cmd: "bash".to_owned(),
+                args: vec![
+                    "-lc".to_owned(),
+                    format!("set -euo pipefail; {check_command}{run_command}"),
+                ],
+                envs,
+                cwd: None,
+            };
+        }
 
         let cmd = match (self.tests, self.crate_type.is_binary()) {
             (true, _) => "test",
             (_, true) => "run",
             (_, _) => "build",
         };
-        args.push(cmd);
 
+        let mut args = vec![cmd];
         if let Mode::Release = self.mode {
             args.push("--release");
         }
 
-        let mut envs = HashMap::new();
-        if self.backtrace {
-            envs.extend(kvs!("RUST_BACKTRACE" => "1"));
+        extend_rustflags(&mut envs, self.aeneas, self.polonius);
+        if self.aeneas {
+            extend_aeneas_envs(&mut envs);
         }
 
         ExecuteCommandRequest {
@@ -461,6 +553,8 @@ pub struct CompileRequest {
     // TODO: Remove `tests` and `backtrace` -- don't make sense for compiling.
     pub tests: bool,
     pub backtrace: bool,
+    pub aeneas: bool,
+    pub polonius: bool,
     pub code: String,
 }
 
@@ -533,6 +627,10 @@ impl LowerRequest for CompileRequest {
         let mut envs = HashMap::new();
         if self.backtrace {
             envs.extend(kvs!("RUST_BACKTRACE" => "1"));
+        }
+        extend_rustflags(&mut envs, self.aeneas, self.polonius);
+        if self.aeneas {
+            extend_aeneas_envs(&mut envs);
         }
 
         ExecuteCommandRequest {
@@ -1290,19 +1388,21 @@ impl Container {
         let rustfmt = {
             let token = token.clone();
             async {
-                self.tool_version(token, "fmt")
+                let version = self
+                    .tool_version(token, "fmt")
                     .await
-                    .context(RustfmtSnafu)?
-                    .context(RustfmtMissingSnafu)
+                    .context(RustfmtSnafu)?;
+                Ok(version.unwrap_or_else(|| Version::unavailable("rustfmt")))
             }
         };
         let clippy = {
             let token = token.clone();
             async {
-                self.tool_version(token, "clippy")
+                let version = self
+                    .tool_version(token, "clippy")
                     .await
-                    .context(ClippySnafu)?
-                    .context(ClippyMissingSnafu)
+                    .context(ClippySnafu)?;
+                Ok(version.unwrap_or_else(|| Version::unavailable("clippy")))
             }
         };
         let miri = {
@@ -2680,8 +2780,17 @@ impl TerminateContainer {
             let stdout = stdout.trim();
             let stderr = stderr.trim();
 
-            error!(?code, %stdout, %stderr, %name, "Killing the container failed");
+            if Self::is_benign_kill_failure(stdout, stderr) {
+                trace!(?code, %stdout, %stderr, %name, "Container was already stopped while cleaning up");
+            } else {
+                error!(?code, %stdout, %stderr, %name, "Killing the container failed");
+            }
         }
+    }
+
+    fn is_benign_kill_failure(stdout: &str, stderr: &str) -> bool {
+        let combined = format!("{stdout}\n{stderr}").to_ascii_lowercase();
+        combined.contains("no such container") || combined.contains("is not running")
     }
 }
 
@@ -3085,6 +3194,8 @@ mod tests {
         crate_type: CrateType::Binary,
         tests: false,
         backtrace: false,
+        aeneas: false,
+        polonius: false,
         code: String::new(),
     };
 
@@ -3293,6 +3404,142 @@ mod tests {
         try_join_all(tests).with_timeout().await?;
 
         Ok(())
+    }
+
+    #[test]
+    fn execute_aeneas_sets_expected_env_vars() {
+        let request = ExecuteRequest {
+            aeneas: true,
+            ..ARBITRARY_EXECUTE_REQUEST
+        };
+
+        let cmd = request.execute_cargo_request();
+
+        assert_eq!(cmd.cmd, "bash");
+        assert_eq!(
+            cmd.args,
+            vec![
+                "-lc".to_owned(),
+                format!(
+                    "set -euo pipefail; cargo rustc --bin {PLAYGROUND_BINARY_NAME} -- {AENEAS_RUSTFLAG} && ./target/debug/{PLAYGROUND_BINARY_NAME}"
+                ),
+            ]
+        );
+        assert_eq!(cmd.envs.get("RUSTFLAGS"), None);
+        assert_eq!(
+            cmd.envs.get("LD_LIBRARY_PATH"),
+            Some(&AENEAS_STAGE2_LIB_PATH.to_owned())
+        );
+        assert_eq!(
+            cmd.envs.get("CHARON_BIN"),
+            Some(&AENEAS_CHARON_BIN_PATH.to_owned())
+        );
+        assert_eq!(
+            cmd.envs.get("AENEAS_BIN"),
+            Some(&AENEAS_BIN_PATH.to_owned())
+        );
+    }
+
+    #[test]
+    fn execute_polonius_sets_expected_rustflags() {
+        let request = ExecuteRequest {
+            polonius: true,
+            ..ARBITRARY_EXECUTE_REQUEST
+        };
+
+        let cmd = request.execute_cargo_request();
+
+        assert_eq!(cmd.cmd, "bash");
+        assert_eq!(
+            cmd.args,
+            vec![
+                "-lc".to_owned(),
+                format!(
+                    "set -euo pipefail; cargo rustc --bin {PLAYGROUND_BINARY_NAME} -- {POLONIUS_RUSTFLAG} && ./target/debug/{PLAYGROUND_BINARY_NAME}"
+                ),
+            ]
+        );
+        assert_eq!(cmd.envs.get("RUSTFLAGS"), None);
+        assert_eq!(cmd.envs.get("LD_LIBRARY_PATH"), None);
+        assert_eq!(cmd.envs.get("CHARON_BIN"), None);
+        assert_eq!(cmd.envs.get("AENEAS_BIN"), None);
+    }
+
+    #[test]
+    fn execute_aeneas_tests_check_then_test() {
+        let request = ExecuteRequest {
+            aeneas: true,
+            tests: true,
+            ..ARBITRARY_EXECUTE_REQUEST
+        };
+
+        let cmd = request.execute_cargo_request();
+
+        assert_eq!(cmd.cmd, "bash");
+        assert_eq!(
+            cmd.args,
+            vec![
+                "-lc".to_owned(),
+                format!("set -euo pipefail; cargo rustc --tests -- {AENEAS_RUSTFLAG}"),
+            ]
+        );
+        assert_eq!(cmd.envs.get("RUSTFLAGS"), None);
+    }
+
+    #[test]
+    fn execute_aeneas_lib_check_only() {
+        let request = ExecuteRequest {
+            aeneas: true,
+            crate_type: CrateType::Library(LibraryType::Rlib),
+            ..ARBITRARY_EXECUTE_REQUEST
+        };
+
+        let cmd = request.execute_cargo_request();
+
+        assert_eq!(cmd.cmd, "bash");
+        assert_eq!(
+            cmd.args,
+            vec![
+                "-lc".to_owned(),
+                format!("set -euo pipefail; cargo rustc --lib -- {AENEAS_RUSTFLAG}"),
+            ]
+        );
+        assert_eq!(cmd.envs.get("RUSTFLAGS"), None);
+    }
+
+    #[test]
+    fn execute_aeneas_and_polonius_combine_rustflags() {
+        let request = ExecuteRequest {
+            aeneas: true,
+            polonius: true,
+            ..ARBITRARY_EXECUTE_REQUEST
+        };
+
+        let cmd = request.execute_cargo_request();
+
+        assert_eq!(cmd.cmd, "bash");
+        assert_eq!(
+            cmd.args,
+            vec![
+                "-lc".to_owned(),
+                format!(
+                    "set -euo pipefail; cargo rustc --bin {PLAYGROUND_BINARY_NAME} -- {AENEAS_RUSTFLAG} {POLONIUS_RUSTFLAG} && ./target/debug/{PLAYGROUND_BINARY_NAME}"
+                ),
+            ]
+        );
+        assert_eq!(cmd.envs.get("RUSTFLAGS"), None);
+        assert_eq!(
+            cmd.envs.get("LD_LIBRARY_PATH"),
+            Some(&AENEAS_STAGE2_LIB_PATH.to_owned())
+        );
+        assert_eq!(
+            cmd.envs.get("CHARON_BIN"),
+            Some(&AENEAS_CHARON_BIN_PATH.to_owned())
+        );
+        assert_eq!(
+            cmd.envs.get("AENEAS_BIN"),
+            Some(&AENEAS_BIN_PATH.to_owned())
+        );
     }
 
     #[tokio::test]
@@ -3534,6 +3781,8 @@ mod tests {
         edition: Edition::Rust2021,
         tests: false,
         backtrace: false,
+        aeneas: false,
+        polonius: false,
         code: String::new(),
     };
 
@@ -3556,6 +3805,45 @@ mod tests {
         coordinator.shutdown().await?;
 
         Ok(())
+    }
+
+    #[test]
+    fn compile_aeneas_sets_expected_env_vars() {
+        let request = CompileRequest {
+            aeneas: true,
+            ..ARBITRARY_COMPILE_REQUEST
+        };
+
+        let cmd = request.execute_cargo_request();
+
+        assert_eq!(cmd.envs.get("RUSTFLAGS"), Some(&"-Zaeneas".to_owned()));
+        assert_eq!(
+            cmd.envs.get("LD_LIBRARY_PATH"),
+            Some(&AENEAS_STAGE2_LIB_PATH.to_owned())
+        );
+        assert_eq!(
+            cmd.envs.get("CHARON_BIN"),
+            Some(&AENEAS_CHARON_BIN_PATH.to_owned())
+        );
+        assert_eq!(
+            cmd.envs.get("AENEAS_BIN"),
+            Some(&AENEAS_BIN_PATH.to_owned())
+        );
+    }
+
+    #[test]
+    fn compile_polonius_sets_expected_rustflags() {
+        let request = CompileRequest {
+            polonius: true,
+            ..ARBITRARY_COMPILE_REQUEST
+        };
+
+        let cmd = request.execute_cargo_request();
+
+        assert_eq!(cmd.envs.get("RUSTFLAGS"), Some(&POLONIUS_RUSTFLAG.to_owned()));
+        assert_eq!(cmd.envs.get("LD_LIBRARY_PATH"), None);
+        assert_eq!(cmd.envs.get("CHARON_BIN"), None);
+        assert_eq!(cmd.envs.get("AENEAS_BIN"), None);
     }
 
     #[tokio::test]
@@ -3632,6 +3920,8 @@ mod tests {
         edition: Edition::Rust2018,
         tests: false,
         backtrace: false,
+        aeneas: false,
+        polonius: false,
         code: String::new(),
     };
 
@@ -3778,6 +4068,8 @@ mod tests {
         edition: Edition::Rust2021,
         tests: false,
         backtrace: false,
+        aeneas: false,
+        polonius: false,
         code: String::new(),
     };
 
@@ -3814,6 +4106,8 @@ mod tests {
             edition: Edition::Rust2015,
             tests: false,
             backtrace: false,
+            aeneas: false,
+            polonius: false,
             code: r#"pub fn mul(a: u8, b: u8) -> u8 { a * b }"#.into(),
         };
 
@@ -3841,6 +4135,8 @@ mod tests {
             edition: Edition::Rust2021,
             tests: false,
             backtrace: false,
+            aeneas: false,
+            polonius: false,
             code: r#"#[export_name = "inc"] pub fn inc(a: u8) -> u8 { a + 1 }"#.into(),
         };
 
@@ -4141,6 +4437,8 @@ mod tests {
             edition: Edition::Rust2021,
             tests: false,
             backtrace: false,
+            aeneas: false,
+            polonius: false,
             code: "pub fn alpha() {}".into(),
         };
 
@@ -4161,6 +4459,8 @@ mod tests {
             crate_type: CrateType::Library(LibraryType::Rlib),
             tests: req.tests,
             backtrace: req.backtrace,
+            aeneas: req.aeneas,
+            polonius: req.polonius,
             code: "pub fn beta() {}".into(),
         };
 
@@ -4191,6 +4491,8 @@ mod tests {
             crate_type: CrateType::Binary,
             tests: false,
             backtrace: false,
+            aeneas: false,
+            polonius: false,
             code: r#"fn main() { println!("hello") }"#.into(),
         };
 
@@ -4219,6 +4521,8 @@ mod tests {
             crate_type: CrateType::Binary,
             tests: false,
             backtrace: false,
+            aeneas: false,
+            polonius: false,
             code: r#"fn main() { std::process::abort(); }"#.into(),
         };
 
@@ -4240,6 +4544,8 @@ mod tests {
             crate_type: CrateType::Binary,
             tests: false,
             backtrace: false,
+            aeneas: false,
+            polonius: false,
             code: Default::default(),
         }
     }

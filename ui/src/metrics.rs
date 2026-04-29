@@ -106,6 +106,8 @@ pub(crate) struct LabelsCore {
     crate_type: Option<CrateType>,
     tests: Option<bool>,
     backtrace: Option<bool>,
+    aeneas: Option<bool>,
+    polonius: Option<bool>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -120,10 +122,12 @@ pub(crate) struct Labels {
     crate_type: Option<CrateType>,
     tests: Option<bool>,
     backtrace: Option<bool>,
+    aeneas: Option<bool>,
+    polonius: Option<bool>,
 }
 
 impl Labels {
-    const COUNT: usize = 9;
+    const COUNT: usize = 11;
 
     const LABELS: &'static [&'static str; Self::COUNT] = &[
         "endpoint",
@@ -135,6 +139,8 @@ impl Labels {
         "crate_type",
         "tests",
         "backtrace",
+        "aeneas",
+        "polonius",
     ];
 
     fn as_values(&self) -> [&'static str; Self::COUNT] {
@@ -148,6 +154,8 @@ impl Labels {
             crate_type,
             tests,
             backtrace,
+            aeneas,
+            polonius,
         } = *self;
 
         fn b(v: Option<bool>) -> &'static str {
@@ -188,6 +196,8 @@ impl Labels {
         };
         let tests = b(tests);
         let backtrace = b(backtrace);
+        let aeneas = b(aeneas);
+        let polonius = b(polonius);
 
         [
             endpoint.into(),
@@ -199,6 +209,8 @@ impl Labels {
             crate_type,
             tests,
             backtrace,
+            aeneas,
+            polonius,
         ]
     }
 
@@ -211,6 +223,8 @@ impl Labels {
             crate_type,
             tests,
             backtrace,
+            aeneas,
+            polonius,
         } = labels_core;
         Self {
             endpoint,
@@ -222,6 +236,8 @@ impl Labels {
             crate_type,
             tests,
             backtrace,
+            aeneas,
+            polonius,
         }
     }
 }
@@ -253,6 +269,8 @@ where
         crate_type: None,
         tests: None,
         backtrace: None,
+        aeneas: None,
+        polonius: None,
     };
 
     record_metric_complete(labels, elapsed);
@@ -274,6 +292,8 @@ impl HasLabelsCore for coordinator::CompileRequest {
             edition,
             tests,
             backtrace,
+            aeneas,
+            polonius,
             code: _,
         } = *self;
 
@@ -285,6 +305,8 @@ impl HasLabelsCore for coordinator::CompileRequest {
             crate_type: Some(crate_type),
             tests: Some(tests),
             backtrace: Some(backtrace),
+            aeneas: Some(aeneas),
+            polonius: Some(polonius),
         }
     }
 }
@@ -298,6 +320,8 @@ impl HasLabelsCore for coordinator::ExecuteRequest {
             edition,
             tests,
             backtrace,
+            aeneas,
+            polonius,
             code: _,
         } = *self;
 
@@ -309,6 +333,8 @@ impl HasLabelsCore for coordinator::ExecuteRequest {
             crate_type: Some(crate_type),
             tests: Some(tests),
             backtrace: Some(backtrace),
+            aeneas: Some(aeneas),
+            polonius: Some(polonius),
         }
     }
 }
@@ -330,6 +356,8 @@ impl HasLabelsCore for coordinator::FormatRequest {
             crate_type: Some(crate_type),
             tests: None,
             backtrace: None,
+            aeneas: None,
+            polonius: None,
         }
     }
 }
@@ -351,6 +379,8 @@ impl HasLabelsCore for coordinator::ClippyRequest {
             crate_type: Some(crate_type),
             tests: None,
             backtrace: None,
+            aeneas: None,
+            polonius: None,
         }
     }
 }
@@ -374,6 +404,8 @@ impl HasLabelsCore for coordinator::MiriRequest {
             crate_type: Some(crate_type),
             tests: Some(tests),
             backtrace: None,
+            aeneas: None,
+            polonius: None,
         }
     }
 }
@@ -395,6 +427,8 @@ impl HasLabelsCore for coordinator::MacroExpansionRequest {
             crate_type: Some(crate_type),
             tests: None,
             backtrace: None,
+            aeneas: None,
+            polonius: None,
         }
     }
 }

@@ -2,10 +2,11 @@
 
 set -euv -o pipefail
 
-repository=shepmaster
+source "$(dirname "${BASH_SOURCE[0]}")/image_repository.sh"
 
-for image in rust-stable rust-beta rust-nightly; do
-    docker pull "${repository}/${image}"
-    # The backend expects images without a repository prefix
-    docker tag "${repository}/${image}" "${image}"
-done
+compiler_image="${PLAYGROUND_COMPILER_IMAGE}"
+
+docker pull "${compiler_image}"
+docker tag "${compiler_image}" "rust-stable"
+docker tag "${compiler_image}" "rust-beta"
+docker tag "${compiler_image}" "rust-nightly"

@@ -2,17 +2,18 @@
 
 set -euv -o pipefail
 
-channels_to_build="${CHANNELS_TO_BUILD-stable beta nightly}"
+source "$(dirname "${BASH_SOURCE[0]}")/image_repository.sh"
 
-repository=shepmaster
+compiler_image="${PLAYGROUND_COMPILER_IMAGE}"
+rust_repo="${PLAYGROUND_RUST_REPO}"
+rust_ref="${PLAYGROUND_RUST_REF}"
 
-for channel in $channels_to_build; do
-    image_name="rust-${channel}"
-    full_name="${repository}/${image_name}"
+docker build \
+    -t "rust-stable" \
+    -t "${compiler_image}" \
+    --build-arg "rust_repo=${rust_repo}" \
+    --build-arg "rust_ref=${rust_ref}" \
+    base
 
-    docker build \
-           -t "${image_name}" \
-           -t "${full_name}" \
-           --build-arg channel="${channel}" \
-           base
-done
+docker tag "rust-stable" "rust-beta"
+docker tag "rust-stable" "rust-nightly"

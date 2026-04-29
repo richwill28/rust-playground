@@ -84,6 +84,10 @@ struct ExecuteRequest {
     tests: bool,
     code: String,
     backtrace: bool,
+    #[serde(default)]
+    aeneas: bool,
+    #[serde(default)]
+    polonius: bool,
 }
 
 impl TryFrom<ExecuteRequest> for coordinator::ExecuteRequest {
@@ -98,6 +102,8 @@ impl TryFrom<ExecuteRequest> for coordinator::ExecuteRequest {
             tests,
             code,
             backtrace,
+            aeneas,
+            polonius,
         } = value;
 
         Ok(coordinator::ExecuteRequest {
@@ -107,6 +113,8 @@ impl TryFrom<ExecuteRequest> for coordinator::ExecuteRequest {
             crate_type: parse_crate_type(&crate_type)?,
             tests,
             backtrace,
+            aeneas,
+            polonius,
             code,
         })
     }

@@ -13,6 +13,8 @@ interface CompileRequestBody {
   code: string;
   edition: string;
   backtrace: boolean; // Used?
+  aeneas: boolean;
+  polonius: boolean;
   target: string;
   assemblyFlavor: string;
   demangleAssembly: string;

@@ -56,6 +56,16 @@ const performTestOnly = (): ThunkAction => (dispatch, getState) => {
   return dispatch(performCommonExecute(crateType, true));
 };
 
+const performNightlyBorrowCheckOnly = (aeneas: boolean, polonius: boolean): ThunkAction =>
+  (dispatch) => {
+    dispatch(changeChannel(Channel.Nightly));
+    return dispatch(performCommonExecute('bin', false, aeneas, polonius));
+  };
+
+const performAeneasOnly = (): ThunkAction => performNightlyBorrowCheckOnly(true, false);
+
+const performPoloniusOnly = (): ThunkAction => performNightlyBorrowCheckOnly(false, true);
+
 const performCompileToNightlyHirOnly = (): ThunkAction => (dispatch) => {
   dispatch(changeChannel(Channel.Nightly));
   dispatch(performCompileToHirOnly());
@@ -72,6 +82,8 @@ const performCompileToCdylibWasmOnly = (): ThunkAction => (dispatch, getState) =
 
 const PRIMARY_ACTIONS: { [index in PrimaryAction]: () => ThunkAction } = {
   [PrimaryActionCore.Asm]: performCompileToAssemblyOnly,
+  [PrimaryActionCore.Aeneas]: performAeneasOnly,
+  [PrimaryActionCore.Polonius]: performPoloniusOnly,
   [PrimaryActionCore.Compile]: performCompileOnly,
   [PrimaryActionCore.Execute]: performExecuteOnly,
   [PrimaryActionCore.Test]: performTestOnly,
@@ -101,6 +113,14 @@ export const performExecute = performAndSwitchPrimaryAction(
 export const performCompile = performAndSwitchPrimaryAction(
   performCompileOnly,
   PrimaryActionCore.Compile,
+);
+export const performAeneas = performAndSwitchPrimaryAction(
+  performAeneasOnly,
+  PrimaryActionCore.Aeneas,
+);
+export const performPolonius = performAndSwitchPrimaryAction(
+  performPoloniusOnly,
+  PrimaryActionCore.Polonius,
 );
 export const performTest = performAndSwitchPrimaryAction(performTestOnly, PrimaryActionCore.Test);
 export const performCompileToAssembly = performAndSwitchPrimaryAction(

@@ -12,6 +12,22 @@
   ],
   "routes": [
     {
+      "src": "/(evaluate\\.json|compile|execute|format|clippy|miri|macro-expansion|websocket|nowebsocket)",
+      "dest": "https://your-railway-backend.up.railway.app/$1"
+    },
+    {
+      "src": "/meta/(.*)",
+      "dest": "https://your-railway-backend.up.railway.app/meta/$1"
+    },
+    {
+      "src": "/(metrics|tokio-metrics)",
+      "dest": "https://your-railway-backend.up.railway.app/$1"
+    },
+    {
+      "src": "/internal/debug/(.*)",
+      "dest": "https://your-railway-backend.up.railway.app/internal/debug/$1"
+    },
+    {
       "src": "/assets/(.*)",
       "dest": "/assets/$1"
     },

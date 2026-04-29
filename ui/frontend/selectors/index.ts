@@ -92,13 +92,19 @@ export const isAutoBuildSelector = createSelector(
 const primaryActionSelector = createSelector(
   rawPrimaryActionSelector,
   autoPrimaryActionSelector,
-  (primaryAction, autoPrimaryAction): PrimaryActionCore => (
-    primaryAction === PrimaryActionAuto.Auto ? autoPrimaryAction : primaryAction
-  ),
+  (primaryAction, autoPrimaryAction): PrimaryActionCore => {
+    if (primaryAction === PrimaryActionAuto.Auto) {
+      return autoPrimaryAction;
+    }
+
+    return primaryAction;
+  },
 );
 
 const LABELS: { [index in PrimaryActionCore]: string } = {
   [PrimaryActionCore.Asm]: 'Show Assembly',
+  [PrimaryActionCore.Aeneas]: 'Aeneas',
+  [PrimaryActionCore.Polonius]: 'Polonius',
   [PrimaryActionCore.Compile]: 'Build',
   [PrimaryActionCore.Execute]: 'Run',
   [PrimaryActionCore.LlvmIr]: 'Show LLVM IR',
@@ -445,7 +451,7 @@ export const miriRequestSelector = createSelector(
   runAsTest,
   aliasingModelSelector,
   codeSelector,
-  (edition, tests, aliasingModel, code, ) => ({ edition, tests, aliasingModel, code }),
+  (edition, tests, aliasingModel, code,) => ({ edition, tests, aliasingModel, code }),
 );
 
 export const macroExpansionRequestSelector = createSelector(
@@ -528,8 +534,8 @@ export const executeRequestPayloadSelector = createSelector(
   channelSelector,
   (state: State) => state.configuration,
   getBacktraceSet,
-  (_state: State, args: { crateType: string, tests: boolean }) => args,
-  (code, channel, configuration, backtrace, { crateType, tests }) => ({
+  (_state: State, args: { crateType: string, tests: boolean, aeneas?: boolean, polonius?: boolean }) => args,
+  (code, channel, configuration, backtrace, { crateType, tests, aeneas = false, polonius = false }) => ({
     channel,
     mode: configuration.mode,
     edition: configuration.edition,
@@ -537,6 +543,8 @@ export const executeRequestPayloadSelector = createSelector(
     tests,
     code,
     backtrace,
+    aeneas,
+    polonius,
   }),
 );
 
@@ -560,6 +568,8 @@ export const compileRequestPayloadSelector = createSelector(
     demangleAssembly: configuration.demangleAssembly,
     processAssembly: configuration.processAssembly,
     backtrace,
+    aeneas: false,
+    polonius: false,
   }),
 );
 

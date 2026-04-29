@@ -24,6 +24,10 @@ pub(crate) struct CompileRequest {
     pub(crate) tests: bool,
     #[serde(default)]
     pub(crate) backtrace: bool,
+    #[serde(default)]
+    pub(crate) aeneas: bool,
+    #[serde(default)]
+    pub(crate) polonius: bool,
     pub(crate) code: String,
 }
 
@@ -48,6 +52,10 @@ pub(crate) struct ExecuteRequest {
     pub(crate) tests: bool,
     #[serde(default)]
     pub(crate) backtrace: bool,
+    #[serde(default)]
+    pub(crate) aeneas: bool,
+    #[serde(default)]
+    pub(crate) polonius: bool,
     pub(crate) code: String,
 }
 

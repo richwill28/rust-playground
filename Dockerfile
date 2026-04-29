@@ -47,6 +47,7 @@ ENV PLAYGROUND_UI_ROOT="/app/ui/frontend/build"
 ENV PLAYGROUND_UI_ADDRESS="0.0.0.0"
 ENV PLAYGROUND_UI_PORT="3000"
 ENV PLAYGROUND_CORS_ENABLED="1"
+ENV PLAYGROUND_SKIP_COMPILER_FETCH="0"
 
 # Copy the worker binary to expected location
 RUN mkdir -p /root/.cargo/bin
