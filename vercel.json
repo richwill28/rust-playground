@@ -6,8 +6,8 @@
       "ENABLE_EXPERIMENTAL_COREPACK": "1"
     }
   },
-  "installCommand": "cd ui/frontend && corepack enable && corepack prepare pnpm@10.27.0 --activate && pnpm install --frozen-lockfile",
-  "buildCommand": "cd ui/frontend && pnpm run build",
+  "installCommand": "cd ui/frontend && corepack enable && corepack prepare pnpm@10.27.0 --activate && corepack pnpm install --frozen-lockfile",
+  "buildCommand": "cd ui/frontend && corepack pnpm run build",
   "outputDirectory": "ui/frontend/build",
   "routes": [
     {
