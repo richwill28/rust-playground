@@ -1,0 +1,39 @@
+{
+    "name": "rust-playground-frontend",
+    "version": 2,
+    "builds": [
+        {
+            "src": "package.json",
+            "use": "@vercel/static-build",
+            "config": {
+                "distDir": "build"
+            }
+        }
+    ],
+    "routes": [
+        {
+            "src": "/(evaluate\\.json|compile|execute|format|clippy|miri|macro-expansion|websocket|nowebsocket)",
+            "dest": "http://65.21.181.55:3000/$1"
+        },
+        {
+            "src": "/meta/(.*)",
+            "dest": "http://65.21.181.55:3000/meta/$1"
+        },
+        {
+            "src": "/(metrics|tokio-metrics)",
+            "dest": "http://65.21.181.55:3000/$1"
+        },
+        {
+            "src": "/internal/debug/(.*)",
+            "dest": "http://65.21.181.55:3000/internal/debug/$1"
+        },
+        {
+            "src": "/assets/(.*)",
+            "dest": "/assets/$1"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/index.html"
+        }
+    ]
+}
