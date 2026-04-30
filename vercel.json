@@ -7,15 +7,8 @@
     }
   },
   "installCommand": "cd ui/frontend && corepack enable && corepack prepare pnpm@10.27.0 --activate && pnpm install --frozen-lockfile",
-  "builds": [
-    {
-      "src": "ui/frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "build"
-      }
-    }
-  ],
+  "buildCommand": "cd ui/frontend && pnpm run build",
+  "outputDirectory": "ui/frontend/build",
   "routes": [
     {
       "src": "/(evaluate\\.json|compile|execute|format|clippy|miri|macro-expansion|websocket|nowebsocket)",

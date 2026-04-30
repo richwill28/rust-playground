@@ -7,15 +7,8 @@
         }
     },
     "installCommand": "corepack enable && corepack prepare pnpm@10.27.0 --activate && pnpm install --frozen-lockfile",
-    "builds": [
-        {
-            "src": "package.json",
-            "use": "@vercel/static-build",
-            "config": {
-                "distDir": "build"
-            }
-        }
-    ],
+    "buildCommand": "pnpm run build",
+    "outputDirectory": "build",
     "routes": [
         {
             "src": "/(evaluate\\.json|compile|execute|format|clippy|miri|macro-expansion|websocket|nowebsocket)",
