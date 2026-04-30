@@ -116,6 +116,7 @@ cd compiler
 ## Deployment
 
 * [Amazon EC2 (Ubuntu)](deployment/ubuntu.md)
+* [Vercel frontend + self-hosted backend](deployment/vercel-selfhosted-backend.md)
 
 ## License
 

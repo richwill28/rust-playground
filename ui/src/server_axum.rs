@@ -69,9 +69,9 @@ struct Factory(Arc<CoordinatorFactory>);
 pub(crate) async fn serve(config: Config) {
     let factory = Arc::new(config.coordinator_factory());
 
-    let (cache_crates_task, cache_crates_tx) =
+    let (_cache_crates_task, cache_crates_tx) =
         CacheTx::spawn(|rx| cache_crates_task(factory.clone(), rx));
-    let (cache_versions_task, cache_versions_tx) =
+    let (_cache_versions_task, cache_versions_tx) =
         CacheTx::spawn(|rx| cache_versions_task(factory.clone(), rx));
 
     let factory = Factory(factory);
@@ -88,6 +88,7 @@ pub(crate) async fn serve(config: Config) {
         .nest_service("/assets", asset_files)
         .layer(rewrite_help_as_index)
         .route("/evaluate.json", post(evaluate))
+        .route("/health", get(health))
         .route("/compile", post(compile))
         .route("/execute", post(execute))
         .route("/format", post(format))
@@ -176,9 +177,11 @@ pub(crate) async fn serve(config: Config) {
     select! {
         v = server => v.unwrap(),
         v = db_task => v.unwrap(),
-        v = cache_crates_task => v.unwrap(),
-        v = cache_versions_task => v.unwrap(),
     }
+}
+
+async fn health() -> StatusCode {
+    StatusCode::OK
 }
 
 fn get_or_post<T: 'static>(handler: impl Handler<T, ()> + Copy) -> MethodRouter {
