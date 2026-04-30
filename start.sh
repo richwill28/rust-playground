@@ -46,9 +46,14 @@ if [[ "${PLAYGROUND_SKIP_COMPILER_FETCH:-0}" != "1" ]]; then
 	setup_remote_docker_tls
 
 	if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-		docker_registry_login
+		if ! docker_registry_login; then
+			echo "Docker registry login failed; continuing without prefetch." >&2
+		fi
 		cd /app/compiler
-		./fetch.sh
+		if ! ./fetch.sh; then
+			echo "Compiler image fetch failed; starting backend anyway." >&2
+			echo "Compile/execute may fail until PLAYGROUND_COMPILER_IMAGE is reachable." >&2
+		fi
 	else
 		echo "Docker is unavailable; skipping compiler image fetch and starting in degraded mode." >&2
 		echo "Set DOCKER_HOST to a reachable Docker daemon (plus TLS vars if needed) to enable compile/execute." >&2
