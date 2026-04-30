@@ -81,7 +81,6 @@
     "node": "^24.12",
     "pnpm": "^10.27"
   },
-  "packageManager": "pnpm@10.27.0",
   "scripts": {
     "test": "jest",
     "test:lint": "eslint '**/*.tsx' '**/*.ts'",

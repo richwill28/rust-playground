@@ -1,6 +1,7 @@
 {
     "name": "rust-playground-frontend",
     "version": 2,
+    "installCommand": "corepack enable && corepack prepare pnpm@10.27.0 --activate && pnpm install --frozen-lockfile",
     "builds": [
         {
             "src": "package.json",
