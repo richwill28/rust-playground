@@ -1,6 +1,11 @@
 {
   "name": "rust-playground-frontend",
   "version": 2,
+  "build": {
+    "env": {
+      "ENABLE_EXPERIMENTAL_COREPACK": "1"
+    }
+  },
   "installCommand": "cd ui/frontend && corepack enable && corepack prepare pnpm@10.27.0 --activate && pnpm install --frozen-lockfile",
   "builds": [
     {
